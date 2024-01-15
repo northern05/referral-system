@@ -1,55 +1,70 @@
-import logging
-
-from app import db
 from app.dao.referral_users_dao import referral_user_dao
 from app.dao.user_dao import user_dao
-from utils import smart_contract_driver
-from config import Config
+from app.dao.points_dao import points_dao
+from app.dao.user_balance_dao import user_balance_dao
+from utils.data_validators import UserUpdate
 
 
-def get_squad(user_id: int):
-    users_squad = referral_user_dao.get_squad(user_id=user_id)
-    response = {"data": u.to_dict() for u in users_squad}
-    return response
+def get_self_info(user_id: int):
+    user = user_dao.get_selected(id=user_id)
+    points = points_dao.get_points_by_user(user_id=user_id)
+    users_rank = user_dao.get_users_rank(user_id=user_id)
+    users_balance = None
+    if user.wallet:
+        users_balance = user_balance_dao.get_balance_by_user(user_id=user_id)
+    return {**user.to_dict(), **points.to_dict(), "rank": users_rank, "balance": users_balance.to_dict()}
 
 
-def calculate_points():
-    users = user_dao.get_all_users()
-    users_balances = {u.user_id: smart_contract_driver.get_balance(u.wallet) for u in users}
-    for user in users:
-        user_balance = users_balances[user.user_id]
-        squad_balance = user_balance
-        # check users deposit
-        if not user_balance:
-            logging.warning(f"User id:{user.user_id}, email: {user.email} balance is None.")
-            continue
-        personal_boost = 1.5 if user_balance > 100 else 1
-        # calculate points
-        points_sum = (1 / Config.INSPECTION_FREQUENCY) * user_balance
-        users_squad = referral_user_dao.get_squad(user_id=user.user_id)
-        if not users_squad:
-            continue
-        for user_from_squad in users_squad:
-            user_from_squad_balance = users_balances[user_from_squad.user_id_referral_to]
-            points_sum += ((1 / Config.INSPECTION_FREQUENCY) * user_from_squad_balance) * (
-                    user_from_squad_balance.generation * 10 / 100)
-            squad_balance+=user_from_squad_balance
-
-        squad_boost = _check_users_boost(balance=squad_balance)
-
-        user.points += (points_sum * personal_boost * squad_boost)
-        db.session.commit()
-
+def update_user(user_id: int, data: dict):
+    new_data = UserUpdate.parse_obj(data)
+    user_dao.update(id=user_id, new_data=new_data.dict())
     return {"ok": True}
 
 
-def _check_users_boost(balance: int):
-    if 100 < balance < 400:
+def get_squad(user_id: int):
+    result = []
+    user_balance = user_balance_dao.get_balance_by_user(user_id=user_id)
+    squad_balance = user_balance.deposit_balance + user_balance.borrowing_balance
+    users_squad = referral_user_dao.get_squad_by_user(user_id=user_id)
+    for u in users_squad:
+        user_balance = user_balance_dao.get_balance_by_user(user_id=u.user_id_referral_to)
+        squad_balance += user_balance.deposit_balance + user_balance.borrowing_balance
+        if u.generation < 2:
+            result.append({**u.user_to.to_dict(), **user_balance.to_dict()})
+    goal, boost = _check_squad_goals(balance=squad_balance)
+    response = {"data": result,
+                "goals": {"goal": goal, "boost": boost,
+                          "balance": round(squad_balance, 2) if squad_balance > 1 else "< 1"}}
+    return response
+
+
+def _check_squad_goals(balance: float):
+    if balance < 100:
+        goal = 100
         boost = 1.5
-    elif 400 < balance < 1000:
+    elif 100 < balance < 400:
+        goal = 400
         boost = 1.7
-    elif 1000 < balance:
+    elif 400 < balance < 1000:
+        goal = 1000
         boost = 2
     else:
-        boost = 1
-    return boost
+        goal = "completed"
+        boost = "max"
+    return goal, boost
+
+
+def get_leaderboard():
+    result = []
+    leaderboard = user_dao.get_leaderboard()
+    for u in leaderboard:
+        result.append({
+            "user_id": u.user_id,
+            "wallet": u.wallet,
+            "total_points": round(u.total_points, 2),
+            "deposit_points": round(u.deposit_points, 2),
+            "borrowing_points": round(u.borrowing_points, 2),
+            "referral_points": round(u.referral_points, 2),
+            "rank": u.rank
+        })
+    return {"data": result}

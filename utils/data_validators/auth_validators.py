@@ -4,10 +4,12 @@ from typing import Optional
 
 class AuthForm(BaseModel):
     email: Optional[EmailStr]
-    idToken: Optional[str]
-    role: Optional[str]
+    idToken: str
     fingerprint: str
     referral_code: Optional[str]
+    screenName: Optional[str]
+    federatedId: Optional[str]
+    wallet: str
 
 
 class RefreshTokenForm(BaseModel):

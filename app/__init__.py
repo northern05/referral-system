@@ -8,6 +8,7 @@ from flask_cors import CORS
 from flask_httpauth import HTTPTokenAuth
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
+from utils.injective_driver import InjectiveDriver
 
 from config import Config
 
@@ -28,6 +29,9 @@ cors = CORS(app, resources='*')
 token_auth = HTTPTokenAuth()
 jwt = JWTManager(app)
 
+#-------- Injective driver----------
+inj_driver = InjectiveDriver(Config)
+
 # ----- Setup logging -------
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -46,6 +50,13 @@ file_handler.setFormatter(formatter)
 # add handlers to logger
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
+# ------ Celery ---------
+from celery import Celery
+from init_celery import init_celery
+
+celery = Celery("referral-system")
+init_celery(celery, app)
+
 # ----- Import api controllers -------
 from app.api import api
 

@@ -16,22 +16,20 @@ from utils import jwt_tools
 @token_auth.verify_token
 @jwt_required(optional=True)
 def verify_token(token):
-    token_type = request.headers['Authorization'].split(' ')[0] if request.headers.get('Authorization') else None
     token = request.headers['Authorization'].split(' ')[1] if request.headers.get('Authorization') else None
 
     user = jwt_tools.decode_jwt_to_user(token)
 
-    if user.is_totp_active:
-        is_two_fa_passed = jwt_tools.get_two_fa_status_from_jwt()
-        if not is_two_fa_passed:
-            return False
+    # if user.is_totp_active:
+    #     is_two_fa_passed = jwt_tools.get_two_fa_status_from_jwt()
+    #     if not is_two_fa_passed:
+    #         return False
 
     if not user:
         logging.debug(f"{token}")
         return False
-    g.auth_type = 'jwt'
     g.user = user
-    logging.debug(f"User [{user.user_id}] {user.email} [{user.role}] is signed")
+    logging.debug(f"User [{user.user_id}] {user.firebase_uid} is signed")
     return True
 
 
@@ -64,14 +62,6 @@ class Refresh(Resource):
     def post(self):
         """Refresh tokens to auth"""
         result = auth_service.refresh_tokens(data=request.json)
-        return jsonify(result)
-
-
-@auth_ns.route('/verify_email')
-class VerifyEmail(Resource):
-    def post(self):
-        """Verify email"""
-        result = auth_service.verify_email(data=request.json)
         return jsonify(result)
 
 

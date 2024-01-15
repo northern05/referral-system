@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  dev-referral:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    image:
+      referral
+    container_name:
+      dev-referral
+    ports:
+      - "6010:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      referral:
+        ipv4_address: 172.21.0.3
+    volumes:
+      - ../:/usr/src/app
+    restart: always
+    command: bash -c 'gunicorn -b 0.0.0.0:5000 -w 2 --timeout 600 --access-logfile - --error-logfile - main:app'
+
+
+networks:
+  referral:
+    external: true

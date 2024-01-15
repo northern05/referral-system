@@ -1,9 +1,13 @@
 import sqlalchemy_filters
+from sqlalchemy import func
 
 from app import db
 from app import exceptions
 from app.dao.base_dao import BaseDAO
 from app.models import User
+from app.models import Points
+from app.models import ReferralUser
+from app.models import ReferralCode
 
 
 class UserDAO(BaseDAO):
@@ -29,29 +33,63 @@ class UserDAO(BaseDAO):
             )
         return query, pagination
 
-    def check_existing_user(self, email: str, firebase_uid: str):
+    def check_existing_user(self, firebase_uid: str, wallet: str):
         return db.session.query(self.model) \
-            .filter(User.email == email) \
+            .join(ReferralUser, ReferralUser.user_id_referral_to == self.model.user_id) \
+            .join(ReferralCode, ReferralCode.code_id == ReferralUser.referral_code_id) \
             .filter(User.firebase_uid == firebase_uid) \
+            .filter(User.wallet == wallet) \
+            .filter(ReferralCode.is_activate == True) \
             .first()
 
     def get_all_users(self):
         return db.session.query(self.model).all()
 
-    def get_by_email(self, email: str):
-        user = db.session.query(User) \
-            .filter(User.email == email) \
-            .first()
-        if not user:
-            raise exceptions.ContentNotFound
+    def get_users_rank(self, user_id: int):
+        sq = db.session.query(
+            User.user_id,
+            func.coalesce(func.sum(Points.deposit_points + Points.borrowing_points + Points.referral_points), 0).label(
+                "total_points")
+        ) \
+            .join(Points, Points.user_id == User.user_id) \
+            .group_by(User.user_id) \
+            .subquery()
 
-        return user
+        rank_query = db.session.query(
+            sq.c.user_id.label("user_id"),
+            sq.c.total_points.label("total_points"),
+            func.rank().over(order_by=sq.c.total_points.desc()).label("rank")) \
+            .subquery()
 
-    def get_totp_secret(self, user_id):
-        totp_secret = db.session.query(User.totp_secret) \
-            .filter_by(user_id=user_id) \
-            .first()[0]
-        return totp_secret
+        main_query = db.session.query(rank_query).filter(rank_query.c.user_id == user_id).first()
+        return main_query.rank
+
+    def get_leaderboard(self):
+        sq = db.session.query(
+            User.user_id,
+            User.wallet,
+            func.sum(Points.deposit_points).label("deposit_points"),
+            func.sum(Points.borrowing_points).label("borrowing_points"),
+            func.sum(Points.referral_points).label("referral_points"),
+            func.coalesce(func.sum(Points.deposit_points + Points.borrowing_points + Points.referral_points), 0).label(
+                "total_points")
+        ) \
+            .join(Points, Points.user_id == User.user_id) \
+            .group_by(User.user_id) \
+            .subquery()
+
+        rank_query = db.session.query(
+            sq.c.user_id.label("user_id"),
+            sq.c.wallet.label("wallet"),
+            sq.c.total_points.label("total_points"),
+            sq.c.deposit_points,
+            sq.c.borrowing_points,
+            sq.c.referral_points,
+            func.rank().over(order_by=sq.c.total_points.desc()).label("rank"))
+        return rank_query
+
+    def get_users_over_ids(self, users_ids: list):
+        return db.session.query(self.model).filter(User.user_id.in_(users_ids)).all()
 
 
 user_dao = UserDAO(User)

@@ -58,7 +58,7 @@ class SessionDAO(BaseDAO):
         session.refresh_token = refresh_token
         db.session.commit()
 
-        return {'access_token': access_token, 'refresh_token': refresh_token}, user_dict
+        return {'access_token': access_token, 'refresh_token': refresh_token}, user.to_dict()
 
     def delete_session(
             self,

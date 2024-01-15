@@ -11,9 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from app import db
 from app.dao.session_dao import session_dao
 from app.dao.user_dao import user_dao
+from app.dao.referral_code_dao import referral_code_dao
 from app.exceptions import *
 from app.models import User
-from app.models.enum import LoginProvider
 from app.services import referral_service
 from config import Config
 from utils import security_tools
@@ -21,12 +21,6 @@ from utils import totp_utils
 from utils.data_validators.auth_validators import AuthForm
 from utils.data_validators.auth_validators import RefreshTokenForm
 from utils.data_validators.auth_validators import TwoFARefreshTokenForm
-from utils.data_validators.auth_validators import VerifyEmailForm
-
-AUTH_PROVIDERS_MAPPING = {
-    'google.com': LoginProvider.google.value,
-    'email': LoginProvider.email.value,
-}
 
 
 def auth_user(data: dict):
@@ -39,55 +33,42 @@ def auth_user(data: dict):
     data = AuthForm.parse_obj(data)
     logging.debug(f"Request with: {data}")
 
-    # jwt_pair = None
-
     try:
         decoded_token = auth.verify_id_token(data.idToken)
     except auth.InvalidIdTokenError as err:
         raise NotAuthorized(err)
 
     fingerprint = data.fingerprint
-    firebase_uid, email, is_verified = decoded_token.get('uid'), decoded_token.get('email'), decoded_token.get(
-        'email_verified')
+    firebase_uid, picture = decoded_token.get('uid'), decoded_token.get('picture')
 
     try:
         # check existing user
         user = user_dao.check_existing_user(
-            email=email,
             firebase_uid=firebase_uid,
-            is_email_verified=is_verified
+            wallet=data.wallet
         )
         if not user:
-            if data.referral_code:
-                # registrate user
-                reg_user(
-                    email=email,
-                    firebase_uid=firebase_uid,
-                    referral_code=data.referral_code
-                )
-            else:
-                raise NotExistReferralCode
+            _check_referral_code(data.referral_code)
+            # registrate user
+            reg_user(
+                name=data.screenName,
+                picture=picture,
+                firebase_uid=firebase_uid,
+                wallet=data.wallet,
+                twitter_id=data.federatedId,
+                referral_code=data.referral_code
+            )
     except IntegrityError as err:
         db.session.rollback()
-        pass
+        raise UserAlreadyExists
     except Exception as err:
         logging.critical(f"Failed to register the user. Error: {err}. Data: {data}")
 
     # try:
-    jwt_pair = login_user(email=email, fingerprint=fingerprint, role=data.role)
-    # login_provider = AUTH_PROVIDERS_MAPPING[decoded_token["firebase"]["sign_in_provider"]]
-
-    # if not is_verified:
-    #     raise EmailNotVerified()
-    new_data = {"is_email_verified": is_verified}
-
-    user_dao.update(id=jwt_pair["user"]["id"], new_data=new_data)
-
-    # except Exception as err:
-    #     logging.critical(f"Failed to login the user. Error: {err}. Data: {data}")
-    #     raise DoNotHaveAccess("Only for existing users")
+    jwt_pair = login_user(firebase_uid=firebase_uid, fingerprint=fingerprint, wallet=data.wallet)
 
     return jwt_pair
+
 
 def refresh_tokens(data: dict):
     """
@@ -110,34 +91,41 @@ def refresh_tokens(data: dict):
     return result
 
 
+def _check_referral_code(referral_code: str):
+    referral_code = referral_code_dao.get_referral_code_by_code(referral_code=referral_code)
+    if not referral_code:
+        raise NotExistReferralCode
+    if referral_code.is_activate:
+        raise ReferralCodeAlreadyUsed
+
+
 def reg_user(**kwargs):
     """
     Method to registrate user
-    :param kwargs: data with user information: email, firebase_uid, role, name
+    :param kwargs: data with user information: firebase_uid, name
     :return: dict with user
     """
-
+    referral_code = kwargs.pop("referral_code")
     user = user_dao.create(**kwargs)
-    referral_service.registrate_user(younger_user_id=user.user_id, referral_code=kwargs.get("referral_code"))
-    logging.debug(f"User {user.email} saved to DB with id {user.user_id}")
-
+    referral_service.registrate_user(younger_user_id=user.user_id, referral_code=referral_code)
+    logging.debug(f"User {user.firebase_uid} saved to DB with id {user.user_id}")
     return user.to_dict()
 
 
-def login_user(email: str, fingerprint: str, role: str = None) -> dict:
+def login_user(firebase_uid: str, fingerprint: str, wallet: str) -> dict:
     """
     Method to login user
-    :param email: users email
+    :param firebase_uid: users email
     :param fingerprint:  users fingerprint
-    :param role: users role
+    :param wallet: users wallet address
     :return: dict with token
     """
-    user = User.query.filter(User.email == email)
-    logging.debug(f"Got from DB {user}")
+    user = User.query.filter(User.firebase_uid == firebase_uid).filter(User.wallet == wallet).first()
+    logging.debug(f"Got from DB {firebase_uid}")
 
     if not user:
-        logging.debug(f"User email={email} not found")
-        raise NotAuthorized(f"User email={email} not found")
+        logging.debug(f"User uid={firebase_uid} not found")
+        raise NotAuthorized(f"User not found!")
 
     user_dict = user.to_dict()
     session_data = {

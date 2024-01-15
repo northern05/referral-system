@@ -1,12 +1,12 @@
 import werkzeug.exceptions
 
 
-class BadAPIUsage(Exception):
+class BadAPIUsage(werkzeug.exceptions.HTTPException):
     code = 400
     description = 'Bad API usage'
 
 
-class ContentNotFound(Exception):
+class ContentNotFound(werkzeug.exceptions.HTTPException):
     code = 404
     description = 'Content not found'
 
@@ -40,19 +40,19 @@ class TooManyRequests(Exception):
     description = 'Too Many Requests'
 
 
-class APIKeyExpired(Exception):
+class APIKeyExpired(werkzeug.exceptions.HTTPException):
     code = 400
     description = 'API Key Expired'
 
 
-class UnhealthyNode(Exception):
-    code = 503
-    description = 'Node unhealthy'
-
-
-class NotExistReferralCode(Exception):
+class NotExistReferralCode(werkzeug.exceptions.HTTPException):
     code = 400
-    description = 'Referral code not exists or expires!'
+    description = 'Referral code not exists!'
+
+
+class ReferralCodeAlreadyUsed(werkzeug.exceptions.HTTPException):
+    code = 400
+    description = 'Referral code already used!'
 
 
 class UserAlreadyExists(werkzeug.exceptions.HTTPException):

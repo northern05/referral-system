@@ -13,4 +13,4 @@ check_logs_folder()
 from app import app
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5010)
+    app.run(debug=True, port=6010)

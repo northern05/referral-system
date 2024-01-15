@@ -1,0 +1,20 @@
+version: '3.3'
+
+networks:
+  referral:
+    external: true
+
+services:
+  dev-redis:
+    image: redis/redis-stack:latest
+    container_name:
+      dev-redis
+    environment:
+      - REDIS_ARGS=--requirepass WKyhkXfsXeqipME7
+    ports:
+      - 6379:6379
+      - 8001:8001
+    networks:
+      referral:
+        ipv4_address: 172.21.0.6
+    restart: always

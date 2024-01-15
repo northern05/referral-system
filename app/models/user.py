@@ -1,42 +1,36 @@
-from sqlalchemy.sql import false
-
 from app import db
 
 
 class User(db.Model):
     __tablename__ = 'users'
-    __table_args__ = (db.UniqueConstraint('email', 'role', 'firebase_uid'),)
+    __table_args__ = (db.UniqueConstraint('firebase_uid', 'wallet'),)
 
     user_id = db.Column(db.Integer, primary_key=True, unique=True)
-    created_at = db.Column(db.Integer, server_default=db.text("UNIX_TIMESTAMP()"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.text("now()"))
 
     firebase_uid = db.Column(db.String(255))
     name = db.Column(db.String(255))
-    email = db.Column(db.String(255), nullable=False)
+    picture = db.Column(db.String(255))
 
     wallet = db.Column(db.String(42), unique=True)
-    points = db.Columns(db.Float)
+    twitter_id = db.Column(db.String(255))
 
     def __repr__(self):
-        return f"{self.email=}"
+        return f"{self.user_id=}"
 
     def to_dict(self):
         return {
             "id": self.user_id,
-            "email": self.email,
             "name": self.name,
-            "is_totp_active": self.is_totp_active,
-            "is_email_verified": self.is_email_verified,
+            "picture": self.picture,
+            "wallet": self.wallet,
+            "twitter_id": self.twitter_id
         }
-
 
     @staticmethod
     def from_jwt_dict(token_sub_data: dict):
         return User(
             user_id=token_sub_data["id"],
-            email=token_sub_data["email"],
             name=token_sub_data["name"],
-            is_email_verified=token_sub_data["is_email_verified"],
-            is_totp_active=token_sub_data["is_totp_active"],
-            role=token_sub_data.get("role"),
+            wallet=token_sub_data.get("wallet")
         )

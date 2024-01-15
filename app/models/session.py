@@ -10,10 +10,10 @@ class Session(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
     user = db.relationship('User', backref=db.backref("sessions"))
 
-    created_at = db.Column(db.Integer, nullable=False, server_default=db.text("UNIX_TIMESTAMP()"))
-    updated_at = db.Column(db.Integer, nullable=False, server_default=db.text("UNIX_TIMESTAMP()"))
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.text("now()"))
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=db.text("now()"))
 
-    refresh_token = db.Column(db.String(512), nullable=False)
+    refresh_token = db.Column(db.Text, nullable=False)
     fingerprint = db.Column(db.String(255), nullable=False)
 
     def __repr__(self):

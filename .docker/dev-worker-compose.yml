@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  dev-referral-worker:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    image:
+      referral
+    container_name:
+      dev-referral-worker
+    ports:
+      - "6011:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      referral:
+        ipv4_address: 172.21.0.5
+    volumes:
+      - ../:/usr/src/app
+    restart: always
+    command: bash -c 'service cron start; gunicorn -b 0.0.0.0:5000 --timeout 600 -c gunicorn_config.py -w 2 --access-logfile - --error-logfile - main:app'
+
+
+  runner:
+    image:
+      referral
+    container_name:
+      dev-referral-runner
+    env_file:
+      - ../.envs/.dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      referral:
+        ipv4_address: 172.21.0.4
+    volumes:
+      - ../:/usr/src/app
+    restart: always
+    command: bash -c 'celery --app app.celery worker --loglevel=debug'
+
+
+networks:
+  referral:
+    external: true

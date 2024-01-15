@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+  referral-postgres:
+    image: postgres:14.8
+    environment:
+      POSTGRES_DB: "dev-referral-new"
+      POSTGRES_USER: "glib"
+      POSTGRES_PASSWORD: "a942b37ccfaf5a813b1432"
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    container_name:
+      referral-postgres
+    ports:
+      - "5432:5432"
+    networks:
+      referral:
+        ipv4_address: 172.21.0.2
+    volumes:
+      - /srv/psql:/var/lib/postgresql/data
+    restart: unless-stopped
+
+
+networks:
+  referral:
+    external: true
